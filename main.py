@@ -6,6 +6,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.client.default import DefaultBotProperties  # ✅ ОБЯЗАТЕЛЬНО
 from dotenv import load_dotenv
 
 import db
@@ -16,7 +17,12 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+# ✅ Новый синтаксис создания бота
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
 dp = Dispatcher(storage=MemoryStorage())
 
 # 🧾 Клавиатуры
