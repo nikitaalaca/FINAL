@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS operations (
 )
 ''')
 
+conn.commit()
+
 # ➕ Добавить пользователя (и начислить рефералу)
 def add_user(user_id, username, referral_from=None):
     cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
@@ -56,7 +58,7 @@ def get_user(user_id):
     cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     return cursor.fetchone()
 
-# ✅ Установить, что пробник использован
+# ✅ Пробник использован
 def set_trial_used(user_id):
     cursor.execute("UPDATE users SET trial_used=1 WHERE user_id=?", (user_id,))
     conn.commit()
@@ -66,7 +68,12 @@ def update_until(user_id, until_date):
     cursor.execute("UPDATE users SET until=?, is_active=1 WHERE user_id=?", (until_date, user_id))
     conn.commit()
 
-# 💳 Пополнить или списать баланс + запись в историю
+# ❌ Отключить подписку
+def set_inactive(user_id):
+    cursor.execute("UPDATE users SET is_active=0 WHERE user_id=?", (user_id,))
+    conn.commit()
+
+# 💸 Баланс
 def update_balance(user_id, amount, comment=""):
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, user_id))
     cursor.execute('''
@@ -75,23 +82,16 @@ def update_balance(user_id, amount, comment=""):
     ''', (user_id, "изменение", amount, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
 
-# 💰 Получить баланс
 def get_balance(user_id):
     cursor.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
     return result[0] if result else 0
 
-# 📋 Все пользователи
-def get_all_users():
-    cursor.execute("SELECT * FROM users")
-    return cursor.fetchall()
-
-# ➕ Добавить ключ в пул
+# 🔑 Ключи
 def add_key(key):
     cursor.execute("INSERT INTO keys (key) VALUES (?)", (key,))
     conn.commit()
 
-# 🔑 Получить доступный ключ
 def get_active_key():
     cursor.execute("SELECT key FROM keys WHERE active=1 LIMIT 1")
     result = cursor.fetchone()
@@ -101,16 +101,19 @@ def get_active_key():
         return result[0]
     return None
 
-# 🔗 Привязать ключ к пользователю
 def assign_key_to_user(user_id, key):
     cursor.execute("UPDATE users SET user_key=? WHERE user_id=?", (key, user_id))
     conn.commit()
 
-# 📤 Получить ключ пользователя
 def get_user_key(user_id):
     cursor.execute("SELECT user_key FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
     return result[0] if result else None
+
+# 📦 Очистка неактивных ключей
+def delete_inactive_keys():
+    cursor.execute("DELETE FROM keys WHERE active=0")
+    conn.commit()
 
 # ✅ Проверка активности
 def is_user_active(user_id):
@@ -118,12 +121,7 @@ def is_user_active(user_id):
     result = cursor.fetchone()
     return result[0] == 1 if result else False
 
-# ❌ Деактивация по окончании подписки
-def set_inactive(user_id):
-    cursor.execute("UPDATE users SET is_active=0 WHERE user_id=?", (user_id,))
-    conn.commit()
-
-# 🧾 Получить историю операций
+# 📊 Операции
 def get_user_operations(user_id):
     cursor.execute('''
         SELECT type, amount, comment, date
@@ -132,4 +130,9 @@ def get_user_operations(user_id):
         ORDER BY id DESC
         LIMIT 20
     ''', (user_id,))
+    return cursor.fetchall()
+
+# 👥 Все пользователи
+def get_all_users():
+    cursor.execute("SELECT * FROM users")
     return cursor.fetchall()
