@@ -225,6 +225,19 @@ async def admin_users_cmd(message: Message):
     text = "\n".join([f"👤 {u[1]} | id: {u[0]} | ₿ {db.get_balance(u[0])}₽ | до: {u[5] or '-'}" for u in users])
     await message.answer(text or "Нет пользователей")
 
+from aiogram.types import BotCommand, BotCommandScopeDefault, MenuButtonCommands
+
+async def set_bot_commands():
+    commands = [
+        BotCommand(command="start", description="🔹 Главное меню"),
+        BotCommand(command="profile", description="👤 Личный кабинет"),
+        BotCommand(command="help", description="❓ Помощь в подключении"),
+        BotCommand(command="admin_users", description="📊 Пользователи (админ)"),
+        BotCommand(command="admin_balance", description="💰 Пополнение (админ)")
+    ]
+    await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+
 # 🚀 Запуск
 async def main():
     keep_alive()
