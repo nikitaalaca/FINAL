@@ -17,14 +17,18 @@ from datetime import datetime, timedelta
 import db
 from parser import get_v2_keys, validate_v2_key
 from keep_alive import keep_alive
+from db import delete_inactive_keys
 
+# Загружаем .env
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # обязательно укажи свой Telegram ID в .env
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
+# Меню
 main_reply_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🏠 Главное меню")],
@@ -80,8 +84,16 @@ async def start(message: Message):
 
     is_new = db.add_user(user_id, username, referral_from=ref_id)
     check_subscription_expiry(user_id)
-
     await message.answer("👋 Привет! Добро пожаловать в бота.", reply_markup=main_reply_menu)
+
+    if is_new and username != ADMIN_USERNAME:
+        try:
+            msg = f"👤 Новый пользователь: @{username} (ID: {user_id})"
+            if ref_id:
+                msg += f"\n👥 Пригласивший: {ref_id}"
+            await bot.send_message(ADMIN_ID, msg)
+        except:
+            pass
 
 @dp.message(F.text == "/profile")
 async def profile(message: Message):
@@ -98,7 +110,6 @@ async def profile(message: Message):
 async def install_v2(call: types.CallbackQuery):
     user_id = call.from_user.id
     user = db.get_user(user_id)
-
     check_subscription_expiry(user_id)
 
     if not db.is_user_active(user_id):
@@ -149,6 +160,7 @@ async def pay_with_balance(call: types.CallbackQuery):
         db.update_balance(user_id, -price, "Покупка подписки")
         db.update_until(user_id, extend_subscription(30))
         await call.message.answer("✅ Подписка активирована на 30 дней!")
+        await bot.send_message(ADMIN_ID, f"💸 Подписка (1 мес) от @{call.from_user.username} (ID: {user_id}) — 300₽")
     else:
         await call.message.answer("❌ Недостаточно средств.")
 
@@ -177,6 +189,7 @@ async def handle_subscription(call: types.CallbackQuery):
     db.update_balance(user_id, -price, f"Подписка на {days} дней")
     db.update_until(user_id, extend_subscription(days))
     await call.message.answer(f"✅ Подписка до {extend_subscription(days)}!\nСписано {price}₽.")
+    await bot.send_message(ADMIN_ID, f"💸 Подписка на {days} дней от @{call.from_user.username} (ID: {user_id}) — {price}₽")
 
 @dp.callback_query(F.data == "referrals")
 async def referrals(call: types.CallbackQuery):
@@ -237,6 +250,7 @@ async def user_history(message: Message):
         text += f"{d} — {t}: {sign}{a}₽ ({c})\n"
     await message.answer(text)
 
+# Админ команды
 @dp.message(F.text.startswith("/admin_balance"))
 async def admin_balance_cmd(message: Message):
     if message.from_user.username != ADMIN_USERNAME:
@@ -290,6 +304,7 @@ async def admin_stats(message: Message):
         f"📈 Средний баланс: {avg_balance}₽"
     )
 
+# Команды Telegram-меню
 async def set_bot_commands():
     commands = [
         BotCommand(command="start", description="🔹 Главное меню"),
@@ -303,8 +318,16 @@ async def set_bot_commands():
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
+# Очистка базы ключей
+async def periodic_cleanup():
+    while True:
+        delete_inactive_keys()
+        await asyncio.sleep(86400)  # раз в сутки
+
+# Запуск
 async def main():
     keep_alive()
+    asyncio.create_task(periodic_cleanup())
     await set_bot_commands()
     await dp.start_polling(bot)
 
